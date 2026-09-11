@@ -29,9 +29,21 @@ struct PluginParamDef
     std::string label;
     std::string type;
     std::optional<PluginParamValue> default_value;
+    /** Tab the parameter is shown on, see param_groups(). */
+    std::optional<std::string> group;
 };
 
 using PluginParamDefs = std::vector<PluginParamDef>;
+
+/**
+ * @brief Titles of the tabs the parameters of a plugin dialog are split into.
+ *
+ * Groups are listed in the order they first appear in @p params. Parameters without a group are
+ * collected under @p ungrouped_title, which then comes first. Returns an empty list when no
+ * parameter declares a group, i.e. when there is nothing to split.
+ */
+std::vector<std::string>
+param_groups(const PluginParamDefs& params, const std::string& ungrouped_title);
 
 struct PluginMeta
 {

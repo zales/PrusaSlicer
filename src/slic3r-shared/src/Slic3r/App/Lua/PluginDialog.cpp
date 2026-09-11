@@ -8,6 +8,8 @@
 #include "Slic3r/App/Yoga/Validator.hpp"
 #include "Slic3r/Biz/I18N/I18N.hpp"
 
+#include <algorithm>
+
 namespace Slic3r::App::Lua {
 
 namespace {
@@ -105,7 +107,12 @@ public:
 
     PluginParamValue value() const override
     {
-        return static_cast<ValidatorType*>(m_textfield->validator())->value();
+        // Parse what the field shows instead of asking its validator. The validator is only
+        // updated when the field loses focus, which never happens to a field on a tab that gets
+        // hidden while it is being edited. The field itself uses a default validator as well.
+        ValidatorType validator;
+        validator.process(m_textfield->text());
+        return validator.value();
     }
 
     Yoga::Item& emplace_control(Yoga::Item& parent) override
@@ -161,20 +168,47 @@ PluginDialog::show_plugin(const PluginMeta& plugin_meta, const PluginParamValueM
     m_meta = plugin_meta;
 
     m_param_controls.clear();
+    m_pages.clear();
+    m_current_page = nullptr;
     while (!content()->items().empty()) {
         content()->remove(content()->get_item(0));
     }
 
-    remove_tab(0);
-    append_tab(plugin_meta.title.value_or(plugin_meta.id));
+    // the previously shown plugin may have had several tabs
+    while (tab_count() > 0) {
+        remove_tab(tab_count() - 1);
+    }
 
     content()->set_orientation(Orientation::Vertical);
+
+    // TRN Title of the plugin dialog tab with the parameters that do not belong to any group
+    const std::string ungrouped_title = Biz::_u8L("General");
+    std::vector<std::string> groups   = param_groups(plugin_meta.params, ungrouped_title);
+    const bool grouped                = !groups.empty();
+    if (!grouped) {
+        // a plugin without groups gets a single tab named after it
+        groups.push_back(plugin_meta.title.value_or(plugin_meta.id));
+    }
+    for (const std::string& group : groups) {
+        append_tab(group);
+        Item* page = content()->emplace_back<Item>();
+        page->set_orientation(Orientation::Vertical);
+        page->set_gap(5);
+        m_pages.push_back(page);
+    }
 
     const float row_padding = 5.f;
     const float row_gap = 10.f;
     const Paddings button_padding(15.f, 5.f);
 
     for (const auto& param : plugin_meta.params) {
+        size_t page = 0;
+        if (grouped) {
+            const std::string& group = param.group.has_value() ? *param.group : ungrouped_title;
+            page = static_cast<size_t>(std::ranges::find(groups, group) - groups.begin());
+        }
+        m_current_page = m_pages.at(page);
+
         auto init_it = param_values.find(param.name);
         auto init_value =
             init_it == param_values.end() ? std::nullopt : std::make_optional(init_it->second);
@@ -190,6 +224,9 @@ PluginDialog::show_plugin(const PluginMeta& plugin_meta, const PluginParamValueM
             PANIC("Unsupported param type");
         }
     }
+    // the buttons belong to the dialog, not to one of the pages
+    m_current_page = nullptr;
+
     Item* buttons_row = content()->emplace_back<Item>();
     buttons_row->set_orientation(Orientation::Horizontal);
     buttons_row->set_flex_grow(1.f);
@@ -225,7 +262,16 @@ PluginDialog::show_plugin(const PluginMeta& plugin_meta, const PluginParamValueM
 
     content()->set_min_width(400);
 
+    set_current_tab(0);
+
     open();
+}
+
+void PluginDialog::on_tab_selected(int current_index)
+{
+    for (size_t i = 0; i < m_pages.size(); ++i) {
+        m_pages[i]->set_visible(static_cast<int>(i) == current_index);
+    }
 }
 
 void PluginDialog::emplace_string_param(
@@ -282,7 +328,8 @@ void PluginDialog::emplace_bool_param(
 
 Yoga::Item& PluginDialog::emplace_row(const char* label)
 {
-    auto* row = content()->emplace_back<Yoga::Item>();
+    Yoga::Item* parent = m_current_page != nullptr ? m_current_page : content();
+    auto* row          = parent->emplace_back<Yoga::Item>();
     row->set_orientation(Yoga::Orientation::Horizontal);
     row->set_flex_grow(1.f);
     row->set_flex_shrink(0.f);

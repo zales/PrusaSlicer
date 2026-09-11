@@ -80,6 +80,9 @@ The table `info` describes plugin with following keys:
 - `params` (array) list of parameter descriptions with following keys:
   - `name` (string) name of key in table as first argument passed to the `execute()` function.
   - `label` (string) displayed name in UI 
+  - `group` (string, optional) tab the parameter is shown on. Tabs follow the order in which the
+    groups first appear in `params`, and parameters without a `group` are collected on a leading
+    _General_ tab. A plugin that declares no groups gets a single tab named after the plugin.
   - `type` (string) type of value / UI control, allowed values are:
     - `float` (UI: number input)
     - `int` (UI: number input)

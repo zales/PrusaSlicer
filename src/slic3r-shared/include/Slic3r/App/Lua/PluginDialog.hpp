@@ -3,6 +3,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "Slic3r/App/Lua/Plugin.hpp"
 #include "Slic3r/App/Yoga/Dialog.hpp"
@@ -33,6 +34,9 @@ public:
 
     void show_plugin(const PluginMeta& plugin_meta, const PluginParamValueMap& param_values);
 
+protected:
+    void on_tab_selected(int current_index) override;
+
 private:
     void emplace_string_param(const PluginParamDef& param, std::optional<PluginParamValue> default_value);
     void emplace_float_param(const PluginParamDef& param, std::optional<PluginParamValue> default_value);
@@ -48,6 +52,11 @@ private:
     std::optional<PluginMeta> m_meta;
     Details::IParamControlMap m_param_controls;
     ProcessFunction m_process_function;
+
+    /** One page per tab, only the page of the selected tab is visible. */
+    std::vector<Yoga::Item*> m_pages;
+    /** Page emplace_row() adds to, content() itself when null. */
+    Yoga::Item* m_current_page{nullptr};
 };
 
 }

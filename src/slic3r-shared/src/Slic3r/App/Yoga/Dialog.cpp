@@ -140,6 +140,11 @@ void Dialog::remove_tab(size_t index)
     m_tab_buttons.erase(m_tab_buttons.cbegin() + index);
 }
 
+size_t Dialog::tab_count() const
+{
+    return m_tab_buttons.size();
+}
+
 void Dialog::set_current_tab(size_t current_index)
 {
     m_current_tab_index = current_index;

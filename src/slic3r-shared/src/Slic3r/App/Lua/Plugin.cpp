@@ -3,6 +3,7 @@
 #include "Slic3r/Biz/Platform/PlatformServices.hpp"
 #include "Slic3r/Biz/Lua/LuaException.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <fmt/format.h>
 #include <ranges>
@@ -37,6 +38,26 @@ std::string to_string(PluginType type)
     return it->second;
 }
 
+std::vector<std::string>
+param_groups(const PluginParamDefs& params, const std::string& ungrouped_title)
+{
+    const auto is_grouped = [](const PluginParamDef& param) { return param.group.has_value(); };
+    if (std::ranges::none_of(params, is_grouped)) {
+        return {};
+    }
+
+    std::vector<std::string> groups;
+    if (!std::ranges::all_of(params, is_grouped)) {
+        groups.push_back(ungrouped_title);
+    }
+    for (const PluginParamDef& param : params) {
+        const std::string& group = param.group.has_value() ? *param.group : ungrouped_title;
+        if (std::ranges::find(groups, group) == groups.end()) {
+            groups.push_back(group);
+        }
+    }
+    return groups;
+}
 
 bool is_path_in_sandbox(
     const boost::filesystem::path& sandbox_path,
@@ -157,7 +178,11 @@ Plugin::parse(Biz::Lua::LuaEngine& lua, const std::string& id_prefix, const std:
             default:
                 break;
             }
-            meta.params.emplace_back(name, label, type, value);
+            std::optional<std::string> group = p.get<std::optional<std::string>>("group");
+            if (group.has_value() && group->empty()) {
+                group.reset();
+            }
+            meta.params.emplace_back(name, label, type, value, group);
         });
     }
 

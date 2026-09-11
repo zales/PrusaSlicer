@@ -83,3 +83,67 @@ TEST_CASE("Plugin parameter defaults keep their declared type", "[Plugin]")
     CHECK(default_of<std::string>(meta, "text") == "abc");
     CHECK_FALSE(param(meta, "missing").default_value.has_value());
 }
+
+TEST_CASE("Plugin parameters are split into tabs by group", "[Plugin]")
+{
+    const auto make_params = [](std::initializer_list<std::optional<std::string>> groups)
+    {
+        PluginParamDefs params;
+        for (const std::optional<std::string>& group : groups) {
+            PluginParamDef param;
+            param.name  = "p" + std::to_string(params.size());
+            param.group = group;
+            params.push_back(param);
+        }
+        return params;
+    };
+
+    SECTION("no groups declared leaves nothing to split")
+    {
+        CHECK(param_groups(make_params({std::nullopt, std::nullopt}), "General").empty());
+    }
+
+    SECTION("groups keep the order of their first appearance")
+    {
+        CHECK(
+            param_groups(make_params({"Box", "Lid", "Box", "PCB"}), "General")
+            == std::vector<std::string>{"Box", "Lid", "PCB"}
+        );
+    }
+
+    SECTION("parameters without a group get a leading tab")
+    {
+        CHECK(
+            param_groups(make_params({"Box", std::nullopt, "Lid"}), "General")
+            == std::vector<std::string>{"General", "Box", "Lid"}
+        );
+    }
+
+    SECTION("a group named like the ungrouped tab shares it")
+    {
+        CHECK(
+            param_groups(make_params({"Box", "General", std::nullopt}), "General")
+            == std::vector<std::string>{"General", "Box"}
+        );
+    }
+}
+
+TEST_CASE("Plugin parameter group is read and an empty one ignored", "[Plugin]")
+{
+    const PluginMeta meta = parse_meta(R"lua(
+        info = {
+            id = "groups",
+            type = "project.plugin",
+            params = {
+                {name = "grouped", type = "int", default = 1, group = "Box"},
+                {name = "empty", type = "int", default = 1, group = ""},
+                {name = "none", type = "int", default = 1},
+            }
+        }
+        function execute(params) end
+    )lua");
+
+    CHECK(param(meta, "grouped").group == "Box");
+    CHECK_FALSE(param(meta, "empty").group.has_value());
+    CHECK_FALSE(param(meta, "none").group.has_value());
+}
