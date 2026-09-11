@@ -350,9 +350,17 @@ struct ProjectLuaApi
                 auto center = Domain::Vec3d{(bb.max - bb.min) / 2.0 + bb.min};
                 center.z() = 0.0;
 
+                // lets a plugin lay several objects out side by side instead of
+                // stacking them all on the bed centre
+                Domain::Vec3d bed_offset = Domain::Vec3d::Zero();
+                if (const auto offset = def.get<std::optional<sol::table>>("bed_offset")) {
+                    bed_offset.x() = offset->get_or("x", 0.0);
+                    bed_offset.y() = offset->get_or("y", 0.0);
+                }
+
                 auto& inst = obj.instances.front();
                 Domain::Transformation xform{inst->get_matrix()};
-                xform.set_offset(*center_at - center);
+                xform.set_offset(*center_at - center + bed_offset);
                 inst->set_transformation(xform);
             }
         };
@@ -847,6 +855,7 @@ void ProjectApi::register_api(Biz::Lua::LuaEngine& lua)
     //--@field object_params? table<string, any> Dictionary of object-specific print settings.
     //--@field other_volumes? VolumeDefinition[] Additional volumes attached to this object.
     //--@field merge? boolean Unite the solid parts and subtract the negative volumes into a single mesh. Modifiers and support blockers/enforcers stay separate volumes. The merged mesh keeps the params of the object's first part, params of the other merged volumes are dropped. When the booleans fail, the volumes are kept and a warning is logged.
+    //--@field bed_offset? Vector3Shape Shift [mm] from the centre of the current bed, where the object is placed by default. Only x and y are used. Lets a plugin lay several objects out side by side.
     //- local ObjectDefinition = {}
 
     //--@class ProjectApi
