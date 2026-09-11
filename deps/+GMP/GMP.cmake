@@ -83,8 +83,10 @@ else ()
 
     ExternalProject_Add(dep_GMP
         EXCLUDE_FROM_ALL ON
-        URL https://gmplib.org/download/gmp/gmp-6.2.1.tar.bz2
-        URL_HASH SHA256=eae9326beb4158c386e39a356818031bd28f3124cf915f8c5b1dc4c7a36b4d7c
+        # 6.2.1's arm64 assembly miscompiles with recent Apple clang: GMP's own
+        # t-mul fails and CGAL booleans corrupt memory. 6.3.0 passes make check.
+        URL https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz
+        URL_HASH SHA256=a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898
         DOWNLOAD_DIR ${${PROJECT_NAME}_DEP_DOWNLOAD_DIR}/GMP
         BUILD_IN_SOURCE ON
         CONFIGURE_COMMAND  ${_cfg_cmd}
