@@ -275,16 +275,25 @@ indexed_triangle_set wall_strip(const Polygon &poly, double lower_z_mm, double u
 
     ret.vertices.reserve(ret.vertices.size() + 2 *offs);
 
-       // The expression unscaled(p).cast<float>().eval() is important here
-       // as it ensures identical conversion of 2D scaled coordinates to float 3D
-       // to that used by the tesselation. This way, the duplicated vertices in the
-       // output mesh can be found with the == operator of the points.
-       // its_merge_vertices will then reliably remove the duplicates.
+    // The expression unscaled<double>(p).cast<float>().eval() is important
+    // here as it ensures identical conversion of 2D scaled coordinates to
+    // float 3D to that used by the tesselation. This way, the duplicated
+    // vertices in the output mesh can be found with the == operator of the
+    // points. its_merge_vertices will then reliably remove the duplicates.
+    // The tesselation unscales one coordinate at a time, where unscaled()
+    // yields a double, so the walls have to unscale in double as well: the
+    // vector overload defaults to float and rounds the product to single
+    // precision, which lands one ulp off the tesselated vertex often enough
+    // to leave the seams between the walls and the caps unwelded.
     for (const Point &p : poly.points)
-        ret.vertices.emplace_back(to_3d(unscaled(p).cast<float>().eval(), float(lower_z_mm)));
+        ret.vertices.emplace_back(
+            to_3d(unscaled<double>(p).cast<float>().eval(), float(lower_z_mm))
+        );
 
     for (const Point &p : poly.points)
-        ret.vertices.emplace_back(to_3d(unscaled(p).cast<float>().eval(), float(upper_z_mm)));
+        ret.vertices.emplace_back(
+            to_3d(unscaled<double>(p).cast<float>().eval(), float(upper_z_mm))
+        );
 
     for (size_t i = startidx + 1; i < startidx + offs; ++i) {
         ret.indices.emplace_back(Domain::Index3{

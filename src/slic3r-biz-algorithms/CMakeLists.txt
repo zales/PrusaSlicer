@@ -141,6 +141,7 @@ if(SLIC3R_BUILD_TESTS)
         test/Slic3r/Biz/Algorithms/BoundingBoxTests.cpp
         test/Slic3r/Biz/Algorithms/BedContainmentTests.cpp
         test/Slic3r/Biz/Algorithms/OptimizersTests.cpp
+        test/Slic3r/Biz/Algorithms/TesselateTests.cpp
 
     )
     target_include_directories(slic3r-biz-algorithms-tests PRIVATE test)
