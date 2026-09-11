@@ -5,6 +5,7 @@
 #include "Slic3r/Math.hpp"
 #include "Slic3r/App/Config/ConfigItemControl.hpp"
 #include "Slic3r/Biz/Algorithms/ModelObject.hpp"
+#include "Slic3r/Biz/CGAL/Algorithms/MergeObjectVolumes.hpp"
 #include "Slic3r/Biz/Emboss/EmbossJob.hpp"
 #include "Slic3r/Biz/Emboss/SvgShapeProvider.hpp"
 #include "Slic3r/Biz/Emboss/TextPresetManager.hpp"
@@ -338,6 +339,11 @@ struct ProjectLuaApi
                 Biz::Algorithms::ModelObject::sort_volumes(&obj);
                 obj.invalidate_bounding_box();
 
+            }
+            if (def.get_or("merge", false) && !Biz::CGAL::Algorithms::merge_object_parts(obj)) {
+                SPDLOG_WARN(
+                    "Plugin object could not be merged into a single mesh, keeping its volumes"
+                );
             }
             if (center_at.has_value()) {
                 const auto& bb = Biz::Algorithms::ModelObject::bounding_box_exact(obj);
@@ -840,6 +846,7 @@ void ProjectApi::register_api(Biz::Lua::LuaEngine& lua)
     //--@class ObjectDefinition : VolumeDefinition
     //--@field object_params? table<string, any> Dictionary of object-specific print settings.
     //--@field other_volumes? VolumeDefinition[] Additional volumes attached to this object.
+    //--@field merge? boolean Unite the solid parts and subtract the negative volumes into a single mesh. Modifiers and support blockers/enforcers stay separate volumes, params of the merged volumes are dropped. When the booleans fail, the volumes are kept and a warning is logged.
     //- local ObjectDefinition = {}
 
     //--@class ProjectApi

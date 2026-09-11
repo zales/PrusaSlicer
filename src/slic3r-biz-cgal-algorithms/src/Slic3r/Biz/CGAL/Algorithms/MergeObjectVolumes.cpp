@@ -4,6 +4,7 @@
 #include "Slic3r/Domain/ModelObject.hpp"
 #include "Slic3r/Biz/CGAL/Algorithms/MeshBoolean.hpp"
 #include "Slic3r/Biz/Algorithms/MeshSplitImpl.hpp"
+#include "Slic3r/Biz/Algorithms/ModelObject.hpp"
 
 #include <optional>
 #include <stack>
@@ -332,6 +333,28 @@ std::optional<TriangleMesh> merge_object_volumes(const ModelObject& model_object
     } catch (...) {
         return std::nullopt;
     }
+}
+
+bool merge_object_parts(ModelObject& model_object)
+{
+    std::optional<TriangleMesh> merged = merge_object_volumes(model_object);
+    if (!merged.has_value() || merged->its.indices.empty()) {
+        return false;
+    }
+
+    for (size_t i = model_object.volumes.size(); i-- > 0;) {
+        const ModelVolume* volume = model_object.volumes[i];
+        if (volume->is_model_part() || volume->is_negative_volume()) {
+            model_object.delete_volume(i);
+        }
+    }
+
+    Biz::Algorithms::ModelObject::
+        add_volume(&model_object, std::move(*merged), Domain::ModelVolumeType::MODEL_PART);
+    // add_volume() appends, but the model part has to come first
+    Biz::Algorithms::ModelObject::sort_volumes(&model_object);
+    model_object.invalidate_bounding_box();
+    return true;
 }
 
 } // namespace Slic3r::Biz::CGAL::Algorithms
