@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <fmt/format.h>
 #include <ranges>
 #include <spdlog/spdlog.h>
@@ -19,6 +20,49 @@ namespace {
 const std::unordered_map<PluginType, std::string> PLUGIN_TYPE_NAMES = {
     {PluginType::ProjectPlugin, "project.plugin"}
 };
+
+/**
+ * @brief Value of a Lua number: an int when it is whole, a double otherwise.
+ */
+PluginParamValue number_value(double number)
+{
+    const double whole = std::round(number);
+    if (whole == number && std::abs(whole) <= std::numeric_limits<int>::max()) {
+        return static_cast<int>(whole);
+    }
+    return number;
+}
+
+/**
+ * @brief Converts one entry of the "values" of a choice parameter, nullopt when it is unusable.
+ *
+ * An entry is a string, a number, or a table {value = <string or number>, label = <string>}.
+ */
+std::optional<PluginChoiceOption> choice_option(const sol::object& entry)
+{
+    sol::object value = entry;
+    std::optional<std::string> label;
+    if (entry.get_type() == sol::type::table) {
+        const sol::table table = entry.as<sol::table>();
+        value                  = table.get<sol::object>("value");
+        label                  = table.get<std::optional<std::string>>("label");
+    }
+
+    PluginChoiceOption option;
+    switch (value.get_type()) {
+    case sol::type::string:
+        option.value = value.as<std::string>();
+        option.label = label.value_or(value.as<std::string>());
+        break;
+    case sol::type::number:
+        option.value = number_value(value.as<double>());
+        option.label = label.value_or(fmt::format("{}", value.as<double>()));
+        break;
+    default:
+        return std::nullopt;
+    }
+    return option;
+}
 }
 
 tl::expected<PluginType, std::string> parse_plugin_type(std::string_view s)
@@ -57,6 +101,34 @@ param_groups(const PluginParamDefs& params, const std::string& ungrouped_title)
         }
     }
     return groups;
+}
+
+std::optional<size_t> find_choice(const PluginParamDef& param, const PluginParamValue& value)
+{
+    const auto matches = [&value](const PluginChoiceOption& option)
+    {
+        return std::visit(
+            []<typename A, typename B>(const A& lhs, const B& rhs) -> bool
+            {
+                constexpr bool lhs_number = std::is_same_v<A, int> || std::is_same_v<A, double>;
+                constexpr bool rhs_number = std::is_same_v<B, int> || std::is_same_v<B, double>;
+                if constexpr (lhs_number && rhs_number) {
+                    return static_cast<double>(lhs) == static_cast<double>(rhs);
+                } else if constexpr (std::is_same_v<A, B>) {
+                    return lhs == rhs;
+                } else {
+                    return false;
+                }
+            },
+            option.value,
+            value
+        );
+    };
+    const auto it = std::ranges::find_if(param.options, matches);
+    if (it == param.options.end()) {
+        return std::nullopt;
+    }
+    return static_cast<size_t>(it - param.options.begin());
 }
 
 bool is_path_in_sandbox(
@@ -182,7 +254,32 @@ Plugin::parse(Biz::Lua::LuaEngine& lua, const std::string& id_prefix, const std:
             if (group.has_value() && group->empty()) {
                 group.reset();
             }
-            meta.params.emplace_back(name, label, type, value, group);
+            PluginChoiceOptions options;
+            if (const auto values = p.get<std::optional<sol::table>>("values")) {
+                // indexed rather than for_each, so the options keep the order they are written in
+                for (size_t i = 1; i <= values->size(); ++i) {
+                    std::optional<PluginChoiceOption> option =
+                        choice_option(values->get<sol::object>(i));
+                    if (option.has_value()) {
+                        options.push_back(std::move(*option));
+                    } else {
+                        SPDLOG_WARN(
+                            "Plugin param '{}': ignoring entry {} of 'values', it is neither a string, "
+                            "a number nor {{value = ..., label = ...}}",
+                            name,
+                            i
+                        );
+                    }
+                }
+            }
+            if (type == "choice" && options.empty()) {
+                SPDLOG_WARN(
+                    "Plugin param '{}' is a choice without any usable 'values', showing a text field",
+                    name
+                );
+                type = "string";
+            }
+            meta.params.emplace_back(name, label, type, value, group, options);
         });
     }
 

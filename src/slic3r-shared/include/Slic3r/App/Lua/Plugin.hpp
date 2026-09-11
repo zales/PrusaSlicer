@@ -23,6 +23,19 @@ std::string to_string(PluginType type);
 using PluginParamValue = std::variant<bool, int, double, std::string>;
 using PluginParamValueMap = std::map<std::string, PluginParamValue>;
 
+/**
+ * @brief One of the options offered by a "choice" parameter.
+ */
+struct PluginChoiceOption
+{
+    /** Value handed to the plugin's execute() when the option is picked. */
+    PluginParamValue value;
+    /** Text shown in the drop down. */
+    std::string label;
+};
+
+using PluginChoiceOptions = std::vector<PluginChoiceOption>;
+
 struct PluginParamDef
 {
     std::string name;
@@ -31,6 +44,8 @@ struct PluginParamDef
     std::optional<PluginParamValue> default_value;
     /** Tab the parameter is shown on, see param_groups(). */
     std::optional<std::string> group;
+    /** Options of a "choice" parameter, in the order they are offered. */
+    PluginChoiceOptions options;
 };
 
 using PluginParamDefs = std::vector<PluginParamDef>;
@@ -44,6 +59,13 @@ using PluginParamDefs = std::vector<PluginParamDef>;
  */
 std::vector<std::string>
 param_groups(const PluginParamDefs& params, const std::string& ungrouped_title);
+
+/**
+ * @brief Index of the option of a "choice" parameter that holds @p value.
+ *
+ * Numbers match by value, no matter whether they are stored as int or double.
+ */
+std::optional<size_t> find_choice(const PluginParamDef& param, const PluginParamValue& value);
 
 struct PluginMeta
 {

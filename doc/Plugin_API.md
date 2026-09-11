@@ -87,7 +87,14 @@ The table `info` describes plugin with following keys:
     - `float` (UI: number input)
     - `int` (UI: number input)
     - `bool` (UI: checkbox)
-  - `default` (number or string) default value
+    - `choice` (UI: drop down with the options listed in `values`)
+  - `values` (array, `choice` only) the options offered, in the order given. An option is a string, a
+    number, or a table `{value = ..., label = "..."}` to show a label other than the value. The value
+    of the picked option is what `execute()` receives: strings stay strings, whole numbers arrive as
+    integers and other numbers as floats. A `choice` without any usable option falls back to a text
+    field.
+  - `default` (number or string) default value. For a `choice` it preselects the option holding the
+    same value, otherwise the first option.
 
 ### Plugin `execute` function
 

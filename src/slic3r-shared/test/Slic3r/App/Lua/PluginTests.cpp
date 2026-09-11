@@ -147,3 +147,62 @@ TEST_CASE("Plugin parameter group is read and an empty one ignored", "[Plugin]")
     CHECK_FALSE(param(meta, "empty").group.has_value());
     CHECK_FALSE(param(meta, "none").group.has_value());
 }
+
+TEST_CASE("Plugin choice parameter options", "[Plugin]")
+{
+    const PluginMeta meta = parse_meta(R"lua(
+        info = {
+            id = "choices",
+            type = "project.plugin",
+            params = {
+                {name = "screw", type = "choice", default = "M4", values = {"M3", "M4", "M5"}},
+                {name = "count", type = "choice", default = 4, values = {1, 2, 4, 2.5}},
+                {name = "boss", type = "choice", default = "nut", values = {
+                    {value = "selftap", label = "Self-tapping"},
+                    {value = "nut"},
+                    true,
+                    {label = "no value"},
+                }},
+                {name = "empty", type = "choice", values = {}},
+            }
+        }
+        function execute(params) end
+    )lua");
+
+    SECTION("a string is both the value and the label")
+    {
+        const PluginParamDef& screw = param(meta, "screw");
+        REQUIRE(screw.options.size() == 3);
+        CHECK(std::get<std::string>(screw.options[1].value) == "M4");
+        CHECK(screw.options[1].label == "M4");
+        CHECK(find_choice(screw, *screw.default_value) == size_t{1});
+    }
+
+    SECTION("numbers keep their type and match whether int or double")
+    {
+        const PluginParamDef& count = param(meta, "count");
+        REQUIRE(count.options.size() == 4);
+        CHECK(std::get<int>(count.options[2].value) == 4);
+        CHECK(count.options[2].label == "4");
+        CHECK(std::get<double>(count.options[3].value) == 2.5);
+        CHECK(count.options[3].label == "2.5");
+        CHECK(find_choice(count, *count.default_value) == size_t{2});
+        CHECK(find_choice(count, PluginParamValue{3}) == std::nullopt);
+        CHECK(find_choice(count, PluginParamValue{std::string{"4"}}) == std::nullopt);
+    }
+
+    SECTION("a table gives a separate label, unusable entries are skipped")
+    {
+        const PluginParamDef& boss = param(meta, "boss");
+        REQUIRE(boss.options.size() == 2);
+        CHECK(std::get<std::string>(boss.options[0].value) == "selftap");
+        CHECK(boss.options[0].label == "Self-tapping");
+        CHECK(boss.options[1].label == "nut");
+        CHECK(find_choice(boss, *boss.default_value) == size_t{1});
+    }
+
+    SECTION("a choice without usable options falls back to a text field")
+    {
+        CHECK(param(meta, "empty").type == "string");
+    }
+}

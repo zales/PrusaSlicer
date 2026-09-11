@@ -1,6 +1,7 @@
 #include "Slic3r/App/Lua/PluginDialog.hpp"
 
 #include "Slic3r/App/Imgui/DoubleSlider.hpp"
+#include "Slic3r/App/Yoga/ComboBox.hpp"
 #include "Slic3r/App/Yoga/InputTextField.hpp"
 #include "Slic3r/App/Yoga/Text.hpp"
 #include "Slic3r/App/Yoga/LayoutButton.hpp"
@@ -51,6 +52,53 @@ private:
     const PluginParamDef& m_param_def;
     std::optional<PluginParamValue> m_init_value;
     Yoga::InputTextField* m_textfield{nullptr};
+};
+
+/**
+ * @brief Drop down over the options of a "choice" parameter.
+ */
+class ChoiceControl : public Details::IParamControl
+{
+public:
+    ChoiceControl(const PluginParamDef& param_def, std::optional<PluginParamValue> init_value) :
+        m_param_def(param_def),
+        m_init_value(std::move(init_value))
+    {}
+
+    PluginParamValue value() const override
+    {
+        return m_param_def.options.at(static_cast<size_t>(m_combo->current_index())).value;
+    }
+
+    Yoga::Item& emplace_control(Yoga::Item& parent) override
+    {
+        std::vector<std::string> labels;
+        labels.reserve(m_param_def.options.size());
+        for (const PluginChoiceOption& option : m_param_def.options) {
+            labels.push_back(option.label);
+        }
+
+        // Naming the combo box also picks its string constructor over the initializer_list one.
+        // Yoga::Object names must not contain '_', it appends its own "_<n>" to keep them unique.
+        std::string name = m_param_def.name;
+        std::ranges::replace(name, '_', '-');
+        m_combo = parent.emplace_back<Yoga::ComboBox>(name);
+        m_combo->set_items(labels);
+
+        // the value of the previous run wins over the declared default, an unknown value selects
+        // the first option
+        const std::optional<PluginParamValue>& selected =
+            m_init_value.has_value() ? m_init_value : m_param_def.default_value;
+        const std::optional<size_t> index =
+            selected.has_value() ? find_choice(m_param_def, *selected) : std::nullopt;
+        m_combo->set_current_index(static_cast<int>(index.value_or(0)));
+        return *m_combo;
+    }
+
+private:
+    const PluginParamDef& m_param_def;
+    std::optional<PluginParamValue> m_init_value;
+    Yoga::ComboBox* m_combo{nullptr};
 };
 
 class BoolControl : public Details::IParamControl
@@ -220,6 +268,8 @@ PluginDialog::show_plugin(const PluginMeta& plugin_meta, const PluginParamValueM
             emplace_int_param(param, init_value);
         } else if (param.type == "bool") {
             emplace_bool_param(param, init_value);
+        } else if (param.type == "choice") {
+            emplace_choice_param(param, init_value);
         } else {
             PANIC("Unsupported param type");
         }
@@ -282,6 +332,15 @@ void PluginDialog::emplace_string_param(
     auto& row = emplace_row(param.label.c_str());
     auto [it, _] =
         m_param_controls.emplace(param.name, std::make_unique<StringControl>(param, default_value));
+    style_control(it->second->emplace_control(row));
+}
+
+void PluginDialog::
+    emplace_choice_param(const PluginParamDef& param, std::optional<PluginParamValue> default_value)
+{
+    auto& row = emplace_row(param.label.c_str());
+    auto [it, _] =
+        m_param_controls.emplace(param.name, std::make_unique<ChoiceControl>(param, default_value));
     style_control(it->second->emplace_control(row));
 }
 
