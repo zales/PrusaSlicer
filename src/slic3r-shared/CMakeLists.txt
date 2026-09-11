@@ -1530,6 +1530,8 @@ if(SLIC3R_BUILD_TESTS)
 
             test/Slic3r/App/DialogNavigationTests.cpp
 
+            test/Slic3r/App/Lua/PluginTests.cpp
+
             test/Slic3r/App/Scene/Node.cpp
             test/Slic3r/App/Scene/Ray.cpp
         test/Slic3r/App/Scene/MouseBindingScheme.cpp

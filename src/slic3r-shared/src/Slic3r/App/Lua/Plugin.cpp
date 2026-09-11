@@ -3,6 +3,7 @@
 #include "Slic3r/Biz/Platform/PlatformServices.hpp"
 #include "Slic3r/Biz/Lua/LuaException.hpp"
 
+#include <cmath>
 #include <fmt/format.h>
 #include <ranges>
 #include <spdlog/spdlog.h>
@@ -134,7 +135,28 @@ Plugin::parse(Biz::Lua::LuaEngine& lua, const std::string& id_prefix, const std:
             auto name = p.get<std::string>("name");
             auto label = p.get_or<std::string>("label", name);
             auto type = p.get<std::string>("type");
-            auto value = p.get<PluginParamValue>("default");
+            // Convert the default according to the declared type. Letting sol2 choose the
+            // variant alternative stores 2.4 as the int 2: its int check accepts any Lua
+            // number, and int comes before double in PluginParamValue.
+            std::optional<PluginParamValue> value;
+            const sol::object default_value = p.get<sol::object>("default");
+            switch (default_value.get_type()) {
+            case sol::type::boolean:
+                value = default_value.as<bool>();
+                break;
+            case sol::type::number:
+                if (type == "int") {
+                    value = static_cast<int>(std::lround(default_value.as<double>()));
+                } else {
+                    value = default_value.as<double>();
+                }
+                break;
+            case sol::type::string:
+                value = default_value.as<std::string>();
+                break;
+            default:
+                break;
+            }
             meta.params.emplace_back(name, label, type, value);
         });
     }
