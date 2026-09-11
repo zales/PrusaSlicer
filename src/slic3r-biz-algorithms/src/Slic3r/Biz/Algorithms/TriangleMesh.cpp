@@ -945,12 +945,18 @@ indexed_triangle_set its_make_cone(double r, double h, double fa)
     vertices.emplace_back(Vec3f::Zero());
     vertices.emplace_back(Vec3f(0., 0., h));
 
+    // Step by an integer fraction of the full turn. Accumulating fa in a
+    // double lands the last angle a hair short of 2 pi and adds a vertex on
+    // top of the first, and the sliver faces that makes break mesh booleans.
+    const size_t n_steps    = std::max<size_t>(3, size_t(std::ceil(2. * std::numbers::pi / fa)));
+    const double angle_step = 2. * std::numbers::pi / n_steps;
     size_t i = 0;
     const auto vec = Eigen::Vector2f(0, float(r));
-    for (double angle=0; angle<2*std::numbers::pi; angle+=fa) {
-        Vec2f p = Eigen::Rotation2Df(angle) * vec;
+    for (size_t step = 0; step < n_steps; ++step) {
+        const double angle = step * angle_step;
+        Vec2f p = Eigen::Rotation2Df(float(angle)) * vec;
         vertices.emplace_back(Vec3f(p(0), p(1), 0.f));
-        if (angle > 0.) {
+        if (step > 0) {
             facets.emplace_back(Index3{
                 0,
                 static_cast<int>(i+2),
