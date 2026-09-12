@@ -305,6 +305,10 @@ inline Domain::Vec3f its_face_normal(const indexed_triangle_set& its, const int 
 indexed_triangle_set its_make_tetrahedron(float size = 1.f);
 indexed_triangle_set its_make_cube(double x, double y, double z);
 indexed_triangle_set its_make_prism(float width, float length, float height);
+// Prism standing on z = 0 with the given flat shape (outer contours with
+// their holes, in scaled coordinates) as its footprint. Empty for an empty
+// footprint or a height that is not positive.
+indexed_triangle_set its_make_extrusion(const Domain::ExPolygons& shape, double height);
 indexed_triangle_set its_make_cylinder(double r, double h, double fa = (2 * std::numbers::pi / 360));
 indexed_triangle_set its_make_cone(double r, double h, double fa = (2 * std::numbers::pi / 360));
 indexed_triangle_set its_make_frustum(double r, double h, double fa = (2 * std::numbers::pi / 360));

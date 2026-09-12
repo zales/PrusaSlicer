@@ -22,6 +22,7 @@
 
 #include "Slic3r/Biz/Algorithms/MeshSplitImpl.hpp"
 #include "Slic3r/Biz/Algorithms/TriangleMesh.hpp"
+#include "Slic3r/Biz/Algorithms/Tesselate.hpp"
 #include "Slic3r/Biz/Algorithms/ClipperUtils.hpp"
 #include "Slic3r/Biz/Algorithms/Geometry/Geometry.hpp"
 #include "Slic3r/Biz/Algorithms/Geometry/ConvexHull.hpp"
@@ -823,6 +824,28 @@ indexed_triangle_set its_make_cube(double xd, double yd, double zd)
         { {x, y, 0}, {x, 0, 0}, {0, 0, 0}, {0, y, 0},
           {x, y, z}, {0, y, z}, {0, 0, z}, {x, 0, z} }
     };
+}
+
+indexed_triangle_set its_make_extrusion(const Domain::ExPolygons& shape, double height)
+{
+    using namespace Tesselate;
+    if (shape.empty() || height <= 0.) {
+        return {};
+    }
+    indexed_triangle_set its;
+    Domain::its_merge(its, triangulate_expolygons_3d(shape, 0., NORMALS_DOWN));
+    for (const Domain::ExPolygon& expoly : shape) {
+        Domain::its_merge(its, wall_strip(expoly.contour, 0., height));
+        for (const Domain::Polygon& hole : expoly.holes) {
+            Domain::its_merge(its, wall_strip(hole, 0., height));
+        }
+    }
+    Domain::its_merge(its, triangulate_expolygons_3d(shape, height, NORMALS_UP));
+    // the caps and the walls convert the points the same way, so the seams
+    // close up once the duplicated vertices are merged
+    its_merge_vertices(its);
+    its_remove_degenerate_faces(its);
+    return its;
 }
 
 indexed_triangle_set its_make_prism(float width, float length, float height)
