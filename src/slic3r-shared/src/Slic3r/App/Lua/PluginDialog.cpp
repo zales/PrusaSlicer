@@ -13,6 +13,8 @@
 
 namespace Slic3r::App::Lua {
 
+namespace {
+
 /**
  * @brief The value of the previous run, unless it does not hold a @p T.
  *
@@ -28,8 +30,6 @@ std::optional<PluginParamValue> init_value_of_type(std::optional<PluginParamValu
     }
     return init_value;
 }
-
-namespace {
 
 class StringControl : public Details::IParamControl
 {
@@ -83,14 +83,18 @@ public:
 
     PluginParamValue value() const override
     {
-        return m_param_def.options.at(static_cast<size_t>(m_combo->current_index())).value;
+        return m_options.at(static_cast<size_t>(m_combo->current_index())).value;
     }
 
     Yoga::Item& emplace_control(Yoga::Item& parent) override
     {
+        // value() runs when the dialog is confirmed, long after show_plugin() returned, so the
+        // options are kept here rather than reached through the param definition
+        m_options = m_param_def.options;
+
         std::vector<std::string> labels;
-        labels.reserve(m_param_def.options.size());
-        for (const PluginChoiceOption& option : m_param_def.options) {
+        labels.reserve(m_options.size());
+        for (const PluginChoiceOption& option : m_options) {
             labels.push_back(option.label);
         }
 
@@ -114,6 +118,7 @@ public:
 private:
     const PluginParamDef& m_param_def;
     std::optional<PluginParamValue> m_init_value;
+    PluginChoiceOptions m_options;
     Yoga::ComboBox* m_combo{nullptr};
 };
 
@@ -229,7 +234,10 @@ PluginDialog::show_plugin(const PluginMeta& plugin_meta, const PluginParamValueM
 {
     using namespace Yoga;
 
+    // The controls keep references into the param definitions, so they have to point into the
+    // dialog's own copy rather than into the caller's meta.
     m_meta = plugin_meta;
+    const PluginMeta& meta = *m_meta;
 
     m_param_controls.clear();
     m_pages.clear();
@@ -247,11 +255,11 @@ PluginDialog::show_plugin(const PluginMeta& plugin_meta, const PluginParamValueM
 
     // TRN Title of the plugin dialog tab with the parameters that do not belong to any group
     const std::string ungrouped_title = Biz::_u8L("General");
-    std::vector<std::string> groups   = param_groups(plugin_meta.params, ungrouped_title);
+    std::vector<std::string> groups   = param_groups(meta.params, ungrouped_title);
     const bool grouped                = !groups.empty();
     if (!grouped) {
         // a plugin without groups gets a single tab named after it
-        groups.push_back(plugin_meta.title.value_or(plugin_meta.id));
+        groups.push_back(meta.title.value_or(meta.id));
     }
     for (const std::string& group : groups) {
         append_tab(group);
@@ -265,7 +273,7 @@ PluginDialog::show_plugin(const PluginMeta& plugin_meta, const PluginParamValueM
     const float row_gap = 10.f;
     const Paddings button_padding(15.f, 5.f);
 
-    for (const auto& param : plugin_meta.params) {
+    for (const auto& param : meta.params) {
         size_t page = 0;
         if (grouped) {
             const std::string& group = param.group.has_value() ? *param.group : ungrouped_title;
@@ -351,8 +359,10 @@ void PluginDialog::emplace_string_param(
     style_control(it->second->emplace_control(row));
 }
 
-void PluginDialog::
-    emplace_choice_param(const PluginParamDef& param, std::optional<PluginParamValue> default_value)
+void PluginDialog::emplace_choice_param(
+    const PluginParamDef& param,
+    std::optional<PluginParamValue> default_value
+)
 {
     auto& row = emplace_row(param.label.c_str());
     auto [it, _] =

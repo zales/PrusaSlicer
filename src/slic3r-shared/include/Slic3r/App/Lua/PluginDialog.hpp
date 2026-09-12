@@ -42,10 +42,7 @@ private:
     void emplace_float_param(const PluginParamDef& param, std::optional<PluginParamValue> default_value);
     void emplace_int_param(const PluginParamDef& param, std::optional<PluginParamValue> default_value);
     void emplace_bool_param(const PluginParamDef& param, std::optional<PluginParamValue> default_value);
-    void emplace_choice_param(
-        const PluginParamDef& param,
-        std::optional<PluginParamValue> default_value
-    );
+    void emplace_choice_param(const PluginParamDef& param, std::optional<PluginParamValue> default_value);
 
     Yoga::Item& emplace_row(const char* label=nullptr);
     void style_control(Yoga::Item& ctrl);
