@@ -67,6 +67,13 @@ bool does_self_intersect(const CGALMesh &mesh);
 bool does_bound_a_volume(const CGALMesh &mesh);
 bool empty(const CGALMesh &mesh);
 
+// Axis aligned bounding box of the mesh: {min, max}.
+std::pair<Domain::Vec3d, Domain::Vec3d> bounding_box(const CGALMesh& mesh);
+
+// Appends B's faces to A without any boolean. Only valid when the two do not
+// touch, the result then is the union as a multi component mesh.
+void join(CGALMesh& A, const CGALMesh& B);
+
 } // namespace cgal
 
 } // namespace Slic3r::MeshBoolean

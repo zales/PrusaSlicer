@@ -10,6 +10,7 @@
 #include <vector>
 #include <memory>
 
+using Slic3r::Biz::CGAL::Algorithms::MeshBoolean::cgal::CGALMesh;
 using Slic3r::Biz::CGAL::Algorithms::MeshBoolean::cgal::CGALMeshPtr;
 using Slic3r::Domain::ModelObject;
 using Slic3r::Domain::ModelVolume;
@@ -307,6 +308,108 @@ perform_csgmesh_booleans(const std::vector<CSGPart>& csgrange, std::vector<CGALM
     return std::move(opstack.top().cgalptr);
 }
 
+/**
+ * @brief True for a plain list: no split volumes (push / pop), every union
+ * before the first difference. Then the result is (union of the positives)
+ * minus (union of the negatives), whatever the evaluation order.
+ */
+bool is_flat_csg(const std::vector<CSGPart>& parts)
+{
+    bool seen_difference = false;
+    for (const CSGPart& part : parts) {
+        if (part.stack_operation != CSGStackOp::Continue) {
+            return false;
+        }
+        if (part.operation == CSGType::Difference) {
+            seen_difference = true;
+        } else if (seen_difference) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * @brief Splits the meshes into layers of mutually non touching meshes.
+ *
+ * Each layer joins into one multi component mesh without a boolean, so the
+ * negatives cost one difference per layer instead of one per hole. Holes
+ * that overlap each other (a countersink over its screw hole) land in
+ * different layers; uniting those with a boolean first is what CGAL is
+ * slowest at.
+ */
+std::vector<CGALMeshPtr> join_layers(std::vector<CGALMeshPtr> meshes)
+{
+    std::vector<CGALMeshPtr> layers;
+    std::vector<std::vector<std::pair<Domain::Vec3d, Domain::Vec3d>>> layer_boxes;
+    for (CGALMeshPtr& mesh : meshes) {
+        const auto box = MeshBoolean::cgal::bounding_box(*mesh);
+        bool placed    = false;
+        for (size_t l = 0; l < layers.size() && !placed; ++l) {
+            const bool apart = std::ranges::all_of(
+                layer_boxes[l],
+                [&box](const auto& other)
+                {
+                    constexpr double margin = 1e-3;
+                    for (int i = 0; i < 3; ++i) {
+                        if (box.second[i] + margin < other.first[i]
+                            || other.second[i] + margin < box.first[i])
+                        {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+            );
+            if (apart) {
+                MeshBoolean::cgal::join(*layers[l], *mesh);
+                layer_boxes[l].push_back(box);
+                placed = true;
+            }
+        }
+        if (!placed) {
+            layers.push_back(std::move(mesh));
+            layer_boxes.push_back({box});
+        }
+    }
+    return layers;
+}
+
+/**
+ * @brief (union of positives) minus (union of negatives), for a flat list.
+ */
+CGALMeshPtr
+perform_flat_booleans(const std::vector<CSGPart>& parts, std::vector<CGALMeshPtr>& cgalmeshes)
+{
+    std::vector<CGALMeshPtr> positives;
+    std::vector<CGALMeshPtr> negatives;
+    for (size_t i = 0; i < parts.size(); ++i) {
+        if (!cgalmeshes[i]) {
+            continue;
+        }
+        (parts[i].operation == CSGType::Union ? positives : negatives)
+            .push_back(std::move(cgalmeshes[i]));
+    }
+    // Layers again: every layer is a set of pieces that do not touch each
+    // other, joined for free, and each union step then adds a whole layer at
+    // once. That is the one by one fold with far fewer steps, and it avoids
+    // uniting two thin slivers in isolation, which the tree order did.
+    CGALMeshPtr result;
+    for (CGALMeshPtr& layer : join_layers(std::move(positives))) {
+        if (!result) {
+            result = std::move(layer);
+        } else {
+            MeshBoolean::cgal::plus(*result, *layer);
+        }
+    }
+    if (result) {
+        for (CGALMeshPtr& layer : join_layers(std::move(negatives))) {
+            MeshBoolean::cgal::minus(*result, *layer);
+        }
+    }
+    return result;
+}
+
 } // namespace
 
 std::optional<TriangleMesh> merge_object_volumes(const ModelObject& model_object)
@@ -323,7 +426,25 @@ std::optional<TriangleMesh> merge_object_volumes(const ModelObject& model_object
             return std::nullopt;
         }
 
-        const CGALMeshPtr merged_mesh = perform_csgmesh_booleans(parts, *cgalmeshes);
+        CGALMeshPtr merged_mesh;
+        if (is_flat_csg(parts)) {
+            // the fast path pairs the pieces differently, which CGAL now and
+            // then fails on where the one by one fold succeeds; keep the
+            // inputs and fall back
+            std::vector<CGALMeshPtr> copies;
+            copies.reserve(cgalmeshes->size());
+            for (const CGALMeshPtr& mesh : *cgalmeshes) {
+                copies.push_back(mesh ? MeshBoolean::cgal::clone(*mesh) : nullptr);
+            }
+            try {
+                merged_mesh = perform_flat_booleans(parts, copies);
+            } catch (...) {
+                merged_mesh = nullptr;
+            }
+        }
+        if (!merged_mesh) {
+            merged_mesh = perform_csgmesh_booleans(parts, *cgalmeshes);
+        }
         if (merged_mesh == nullptr) {
             return std::nullopt;
         }

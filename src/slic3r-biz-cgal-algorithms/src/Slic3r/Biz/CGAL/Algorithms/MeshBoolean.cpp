@@ -15,6 +15,8 @@
 
 // CGAL headers
 #include <CGAL/Polygon_mesh_processing/corefinement.h>
+#include <CGAL/Polygon_mesh_processing/bbox.h>
+#include <CGAL/boost/graph/copy_face_graph.h>
 #include <CGAL/Exact_integer.h>
 #include <CGAL/Surface_mesh.h>
 #include <CGAL/Cartesian_converter.h>
@@ -25,8 +27,8 @@
 
 namespace Slic3r::Biz::CGAL::Algorithms::MeshBoolean {
 
+using Domain::Vec3d;
 using Domain::Vec3f;
-
 
 using MapMatrixXfUnaligned = Eigen::Map<const Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor | Eigen::DontAlign>>;
 using MapMatrixXiUnaligned = Eigen::Map<const Eigen::Matrix<int,   Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor | Eigen::DontAlign>>;
@@ -327,6 +329,17 @@ bool does_bound_a_volume(const CGALMesh &mesh)
 bool empty(const CGALMesh &mesh)
 {
     return mesh.m.is_empty();
+}
+
+std::pair<Vec3d, Vec3d> bounding_box(const CGALMesh& mesh)
+{
+    const ::CGAL::Bbox_3 bb = CGALProc::bbox(mesh.m);
+    return {Vec3d{bb.xmin(), bb.ymin(), bb.zmin()}, Vec3d{bb.xmax(), bb.ymax(), bb.zmax()}};
+}
+
+void join(CGALMesh& A, const CGALMesh& B)
+{
+    ::CGAL::copy_face_graph(B.m, A.m);
 }
 
 CGALMeshPtr clone(const CGALMesh &m)

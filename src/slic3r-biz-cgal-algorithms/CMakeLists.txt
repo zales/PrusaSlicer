@@ -98,6 +98,7 @@ endif ()
 if(SLIC3R_BUILD_TESTS)
     add_executable(slic3r-biz-cgal-algorithms-tests
         test/Slic3r/Biz/CGAL/Algorithms/CGALTests.cpp
+        test/Slic3r/Biz/CGAL/Algorithms/MergeObjectVolumesTests.cpp
     )
     target_include_directories(slic3r-biz-cgal-algorithms-tests PRIVATE test)
     target_link_libraries(slic3r-biz-cgal-algorithms-tests PRIVATE slic3r-biz-cgal-algorithms Catch2::Catch2WithMain)
