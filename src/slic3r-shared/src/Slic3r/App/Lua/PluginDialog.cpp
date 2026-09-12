@@ -13,13 +13,29 @@
 
 namespace Slic3r::App::Lua {
 
+/**
+ * @brief The value of the previous run, unless it does not hold a @p T.
+ *
+ * The values of the previous run are matched to the parameters by name only. When the plugin
+ * has changed the type of a parameter in the meantime, its old value is ignored so that the
+ * control falls back to the declared default instead of throwing on std::get.
+ */
+template <typename T>
+std::optional<PluginParamValue> init_value_of_type(std::optional<PluginParamValue> init_value)
+{
+    if (init_value.has_value() && !std::holds_alternative<T>(*init_value)) {
+        return std::nullopt;
+    }
+    return init_value;
+}
+
 namespace {
 
 class StringControl : public Details::IParamControl
 {
 public:
     StringControl(const PluginParamDef& param_def, std::optional<PluginParamValue> init_value) :
-        m_param_def(param_def), m_init_value(std::move(init_value))
+        m_param_def(param_def), m_init_value(init_value_of_type<std::string>(std::move(init_value)))
     {}
 
     PluginParamValue value() const override
@@ -106,7 +122,7 @@ class BoolControl : public Details::IParamControl
 public:
     BoolControl(const PluginParamDef& param_def, std::optional<PluginParamValue> init_value) :
         m_param_def(param_def),
-        m_init_value(std::move(init_value))
+        m_init_value(init_value_of_type<bool>(std::move(init_value)))
     {}
 
     PluginParamValue value() const override
@@ -150,7 +166,7 @@ public:
         std::optional<PluginParamValue> init_value
     ) :
         m_param_def(param_def),
-        m_init_value(std::move(init_value))
+        m_init_value(init_value_of_type<NumType>(std::move(init_value)))
     {}
 
     PluginParamValue value() const override
