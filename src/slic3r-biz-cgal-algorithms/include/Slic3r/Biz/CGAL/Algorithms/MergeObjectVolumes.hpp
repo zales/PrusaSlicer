@@ -23,7 +23,9 @@ std::optional<Domain::TriangleMesh> merge_object_volumes(const Domain::ModelObje
  *
  * The model parts are united and the negative volumes subtracted, see merge_object_volumes(), and
  * the result is put back as a single model part. Modifiers and support blockers/enforcers are left
- * as they are. Settings attached to the replaced volumes are dropped.
+ * as they are. The merged part takes over the name and the settings of the first model part, the
+ * settings of the other replaced volumes are dropped. A single model part with no negative volume
+ * is left untouched.
  *
  * @return false, leaving @p model_object untouched, when the booleans could not be performed.
  */

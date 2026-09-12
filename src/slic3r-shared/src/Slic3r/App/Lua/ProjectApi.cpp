@@ -846,7 +846,7 @@ void ProjectApi::register_api(Biz::Lua::LuaEngine& lua)
     //--@class ObjectDefinition : VolumeDefinition
     //--@field object_params? table<string, any> Dictionary of object-specific print settings.
     //--@field other_volumes? VolumeDefinition[] Additional volumes attached to this object.
-    //--@field merge? boolean Unite the solid parts and subtract the negative volumes into a single mesh. Modifiers and support blockers/enforcers stay separate volumes, params of the merged volumes are dropped. When the booleans fail, the volumes are kept and a warning is logged.
+    //--@field merge? boolean Unite the solid parts and subtract the negative volumes into a single mesh. Modifiers and support blockers/enforcers stay separate volumes. The merged mesh keeps the params of the object's first part, params of the other merged volumes are dropped. When the booleans fail, the volumes are kept and a warning is logged.
     //- local ObjectDefinition = {}
 
     //--@class ProjectApi

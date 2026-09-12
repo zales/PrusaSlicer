@@ -6,6 +6,8 @@
 #include "Slic3r/Biz/Algorithms/MeshSplitImpl.hpp"
 #include "Slic3r/Biz/Algorithms/ModelObject.hpp"
 
+#include <algorithm>
+#include <iterator>
 #include <optional>
 #include <stack>
 #include <vector>
@@ -337,20 +339,44 @@ std::optional<TriangleMesh> merge_object_volumes(const ModelObject& model_object
 
 bool merge_object_parts(ModelObject& model_object)
 {
+    const auto is_merged = [](const ModelVolume* volume)
+    { return volume->is_model_part() || volume->is_negative_volume(); };
+
+    std::vector<ModelVolume*> merged_volumes;
+    std::ranges::copy_if(model_object.volumes, std::back_inserter(merged_volumes), is_merged);
+    if (merged_volumes.size() == 1 && merged_volumes.front()->is_model_part()) {
+        // a single part with nothing to subtract is already merged, keep it as it is
+        return true;
+    }
+
     std::optional<TriangleMesh> merged = merge_object_volumes(model_object);
     if (!merged.has_value() || merged->its.indices.empty()) {
         return false;
     }
 
+    // the merged part takes over the name and settings of the first part it replaces
+    const auto first_part = std::ranges::find_if(
+        merged_volumes, [](const ModelVolume* volume) { return volume->is_model_part(); }
+    );
+    std::string name;
+    std::optional<Domain::VolumeSettings> settings;
+    if (first_part != merged_volumes.end()) {
+        name     = (*first_part)->name;
+        settings = (*first_part)->volume_settings;
+    }
+
     for (size_t i = model_object.volumes.size(); i-- > 0;) {
-        const ModelVolume* volume = model_object.volumes[i];
-        if (volume->is_model_part() || volume->is_negative_volume()) {
+        if (is_merged(model_object.volumes[i])) {
             model_object.delete_volume(i);
         }
     }
 
-    Biz::Algorithms::ModelObject::
+    ModelVolume* volume = Biz::Algorithms::ModelObject::
         add_volume(&model_object, std::move(*merged), Domain::ModelVolumeType::MODEL_PART);
+    volume->name = std::move(name);
+    if (settings.has_value()) {
+        volume->volume_settings = std::move(*settings);
+    }
     // add_volume() appends, but the model part has to come first
     Biz::Algorithms::ModelObject::sort_volumes(&model_object);
     model_object.invalidate_bounding_box();

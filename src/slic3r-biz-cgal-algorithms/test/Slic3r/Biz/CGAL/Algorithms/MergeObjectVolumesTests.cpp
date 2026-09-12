@@ -27,8 +27,8 @@ Domain::ModelVolume* add_box(
     return volume;
 }
 
-// A 10 mm cube with a 4 x 4 mm hole straight through it. The hole reaches past the cube in Z
-// whether add_volume() centres the geometry or keeps its corner at the offset.
+// A 10 mm cube with a 4 x 4 mm hole straight through it. add_volume() keeps the mesh where it
+// is, so the hole is made taller than the cube and shifted down to reach past both faces.
 void add_cube_with_hole(Domain::ModelObject& object)
 {
     add_box(object, {10., 10., 10.}, Domain::Vec3d::Zero(), Domain::ModelVolumeType::MODEL_PART);
@@ -49,6 +49,35 @@ TEST_CASE("merge_object_parts subtracts negative volumes from the parts", "[CGAL
     const Domain::ModelVolume& merged = *object.volumes.front();
     CHECK(merged.is_model_part());
     CHECK_THAT(Domain::its_volume(merged.mesh().its), WithinAbs(1000. - 4. * 4. * 10., 1e-2));
+}
+
+TEST_CASE("merge_object_parts keeps the name and settings of the first part", "[CGAL]")
+{
+    Domain::Model model;
+    Domain::ModelObject& object = *model.add_object();
+    add_cube_with_hole(object);
+    Domain::ModelVolume& part = *object.volumes.front();
+    part.name = "body";
+    const Domain::VolumeSettings settings = part.volume_settings;
+
+    REQUIRE(Biz::CGAL::Algorithms::merge_object_parts(object));
+
+    REQUIRE(object.volumes.size() == 1);
+    CHECK(object.volumes.front()->name == "body");
+    CHECK(object.volumes.front()->volume_settings == settings);
+}
+
+TEST_CASE("merge_object_parts leaves a single part alone", "[CGAL]")
+{
+    Domain::Model model;
+    Domain::ModelObject& object = *model.add_object();
+    const Domain::ModelVolume* part =
+        add_box(object, {10., 10., 10.}, Domain::Vec3d::Zero(), Domain::ModelVolumeType::MODEL_PART);
+
+    REQUIRE(Biz::CGAL::Algorithms::merge_object_parts(object));
+
+    REQUIRE(object.volumes.size() == 1);
+    CHECK(object.volumes.front() == part);
 }
 
 TEST_CASE("merge_object_parts keeps modifiers", "[CGAL]")
