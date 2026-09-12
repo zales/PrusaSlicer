@@ -4,7 +4,9 @@
 #include "Slic3r/Log.hpp"
 #include "Slic3r/Math.hpp"
 #include "Slic3r/App/Config/ConfigItemControl.hpp"
+#include "Slic3r/Biz/Algorithms/ClipperUtils.hpp"
 #include "Slic3r/Biz/Algorithms/ModelObject.hpp"
+#include "Slic3r/Biz/Algorithms/Scaling.hpp"
 #include "Slic3r/Biz/Emboss/EmbossJob.hpp"
 #include "Slic3r/Biz/Emboss/SvgShapeProvider.hpp"
 #include "Slic3r/Biz/Emboss/TextPresetManager.hpp"
@@ -491,7 +493,39 @@ Mesh create_torus(
     )};
 }
 
+// Reads a list of corners in mm into a polygon in scaled coordinates. A corner
+// is given either as an array, {x, y}, or by key, {x = , y = }.
+Domain::Polygon read_polygon(const sol::table& points)
+{
+    using Biz::Algorithms::Scaling::scaled;
 
+    Domain::Polygon polygon;
+    for (size_t i = 1; i <= points.size(); ++i) {
+        const sol::table p = points.get<sol::table>(i);
+        const double x     = p.get_or(1, p.get_or("x", 0.0));
+        const double y     = p.get_or(2, p.get_or("y", 0.0));
+        polygon.points.emplace_back(scaled(x), scaled(y));
+    }
+    return polygon;
+}
+
+// Extrudes an outline with optional holes from z = 0 to z = height.
+Mesh create_extrusion(const sol::table& outline, double height, std::optional<sol::table> holes)
+{
+    const Domain::Polygons contours{read_polygon(outline)};
+    Domain::Polygons hole_polygons;
+    if (holes.has_value()) {
+        for (size_t i = 1; i <= holes->size(); ++i) {
+            hole_polygons.push_back(read_polygon(holes->get<sol::table>(i)));
+        }
+    }
+    // the difference normalises whatever the plugin sent: the winding of each
+    // ring stops mattering, the holes may come in any order, and an outline
+    // that touches itself still yields a shape that can be extruded
+    const Domain::ExPolygons shape =
+        Biz::Algorithms::ClipperUtils::diff_ex(contours, hole_polygons);
+    return {Biz::Algorithms::TriangleMesh::its_make_extrusion(shape, height)};
+}
 
 Mesh emboss_svg(Biz::Lua::LuaEngine& lua, const std::string& file_path, double depth)
 {
@@ -970,6 +1004,17 @@ void ProjectApi::register_api(Biz::Lua::LuaEngine& lua)
     //--@return Mesh mesh A constructed geometry
     //- function api.make_torus(r, t, ra, ta) end
     api["make_torus"] = &create_torus;
+
+    //-- Extrudes a flat outline into a prism standing on z = 0.
+    //-- Corners are given in mm as {x, y} pairs, counter clockwise or clockwise;
+    //-- holes are further outlines inside the first one. A rounded box wall is
+    //-- one such shape with one hole.
+    //--@param outline table<integer, table> Corners of the outline [mm].
+    //--@param height number Height of the prism [mm].
+    //--@param holes? table<integer, table<integer, table>> Outlines of holes.
+    //--@return Mesh mesh A constructed geometry
+    //- function api.make_extrusion(outline, height, holes) end
+    api["make_extrusion"] = &create_extrusion;
 
     //-- Embosses an SVG file into a mesh.
     //--@param path string The path to the SVG file.
